@@ -1,7 +1,7 @@
 """爬取 jinjiancheng.com 的公众号文章正文（不含评论），保存为 Markdown。
 
-- https://www.jinjiancheng.com/articles/jinjiancheng -> articles/jinjiancheng/
-- https://www.jinjiancheng.com/articles/tianjiqitan  -> articles/tianjiqitan/
+- https://www.jinjiancheng.com/articles/jinjiancheng -> docs/articles/jinjiancheng/
+- https://www.jinjiancheng.com/articles/tianjiqitan  -> docs/articles/tianjiqitan/
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import requests
 from bs4 import BeautifulSoup
 
 BASE_URL = "https://www.jinjiancheng.com"
-OUTPUT_ROOT = Path(__file__).parent / "articles"
+OUTPUT_ROOT = Path(__file__).parent / "docs" / "articles"
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -34,6 +34,13 @@ SECTIONS = {
     "jinjiancheng": "/articles/jinjiancheng",
     "tianjiqitan": "/articles/tianjiqitan",
 }
+
+
+def safe_filename(title: str) -> str:
+    """将文章标题转换为可安全使用的文件名。"""
+    name = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "-", title)
+    name = re.sub(r"\s+", " ", name).strip(" .-")
+    return name or "未命名"
 
 
 class Crawler:
@@ -123,23 +130,33 @@ class Crawler:
         title_el = soup.select_one("h1")
         title = title_el.get_text(strip=True) if title_el else url.rsplit("/", 1)[-1]
 
+        # 部分文章整篇装在一个 <p> 里，靠 <br> 分段
+        for br in body.find_all("br"):
+            br.replace_with("\n")
+
+        def segments(node) -> list[str]:
+            raw = node.get_text(" ", strip=False)
+            parts = (re.sub(r"[^\S\n]+", " ", p).strip() for p in raw.split("\n"))
+            return [p for p in parts if p]
+
         lines: list[str] = []
         for node in body.find_all(["h1", "h2", "h3", "h4", "p", "li", "blockquote", "pre"]):
-            text = node.get_text(" ", strip=True)
-            text = re.sub(r"\s+", " ", text)
-            if not text:
-                continue
             name = node.name
-            if name in {"h1", "h2", "h3", "h4"}:
-                lines.append("#" * (int(name[1]) + 1) + f" {text}")
-            elif name == "li":
-                lines.append(f"- {text}")
-            elif name == "blockquote":
-                lines.append(f"> {text}")
-            elif name == "pre":
+            if name == "pre":
                 lines.append(f"```\n{node.get_text()}\n```")
+                continue
+
+            parts = segments(node)
+            if not parts:
+                continue
+            if name in {"h1", "h2", "h3", "h4"}:
+                lines.append("#" * (int(name[1]) + 1) + f" {' '.join(parts)}")
+            elif name == "li":
+                lines.append(f"- {' '.join(parts)}")
+            elif name == "blockquote":
+                lines.extend(f"> {p}" for p in parts)
             else:
-                lines.append(text)
+                lines.extend(parts)
 
         if not lines:
             text = body.get_text("\n", strip=True)
@@ -153,19 +170,22 @@ class Crawler:
         out_dir = OUTPUT_ROOT / section
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        def path_for(url: str) -> Path:
-            return out_dir / f"{'-'.join(url.split('/')[-2:])}.md"  # 公众号-日期
+        def date_of(url: str) -> str:
+            return url.rsplit("/", 1)[-1]
+
+        def saved_path(url: str) -> Path | None:
+            return next(out_dir.glob(f"{date_of(url)}-*.md"), None)
 
         incremental = not (full or overwrite)
         links = self.collect_links(
-            list_path, is_saved=(lambda u: path_for(u).exists()) if incremental else None
+            list_path, is_saved=(lambda u: saved_path(u) is not None) if incremental else None
         )
         print(f"\n[{section}] 待处理 {len(links)} 篇文章，输出目录 {out_dir}\n")
 
         saved = skipped = failed = 0
         for idx, url in enumerate(links, 1):
-            path = path_for(url)
-            if path.exists() and not overwrite:
+            old_path = saved_path(url)
+            if old_path is not None and not overwrite:
                 skipped += 1
                 continue
 
@@ -182,6 +202,9 @@ class Crawler:
                 continue
 
             title, content = result
+            path = out_dir / f"{date_of(url)}-{safe_filename(title)}.md"
+            if old_path is not None and old_path != path:
+                old_path.unlink()
             path.write_text(f"# {title}\n\n{content}\n", encoding="utf-8")
             saved += 1
             print(f"  [{idx}/{len(links)}] 已保存 {path.name} · {title}")

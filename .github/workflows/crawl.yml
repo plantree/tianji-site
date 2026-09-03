@@ -32,12 +32,12 @@ jobs:
 
       - name: 提交新增文章
         run: |
-          if [ -z "$(git status --porcelain articles)" ]; then
+          if [ -z "$(git status --porcelain docs/articles)" ]; then
             echo "没有新文章，跳过提交"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add articles
+          git add docs/articles
           git commit -m "chore: 增量爬取 $(date -u +%Y-%m-%d)"
           git push

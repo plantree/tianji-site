@@ -1,0 +1,21 @@
+{
+  "name": "tianji-site",
+  "version": "1.0.0",
+  "description": "VitePress 构建的公众号文章归档站",
+  "type": "module",
+  "scripts": {
+    "dev": "vitepress dev docs",
+    "build": "vitepress build docs",
+    "preview": "vitepress preview docs",
+    "crawl": "python3 crawler.py"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/plantree/tianji-site.git"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "vitepress": "^1.6.3",
+    "vue": "^3.5.13"
+  }
+}
