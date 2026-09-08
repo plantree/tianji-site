@@ -18,6 +18,30 @@ function articleDate(relativePath) {
   return relativePath.match(/\/(\d{4}-\d{2}-\d{2})-/)?.[1]
 }
 
+function addArticleStats(pageData) {
+  if (!articleDate(pageData.relativePath)) return
+
+  const file = path.join(DOCS_ROOT, pageData.relativePath)
+  if (!fs.existsSync(file)) return
+
+  const text = fs
+    .readFileSync(file, 'utf-8')
+    .replace(/^---[\s\S]*?---/m, '')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/<[^>]+>/g, '')
+
+  const chineseCharacters = text.match(/\p{Script=Han}/gu)?.length ?? 0
+  const otherWords = text.match(/[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*/g)?.length ?? 0
+
+  pageData.frontmatter.wordCount = chineseCharacters + otherWords
+  pageData.frontmatter.readingMinutes = Math.max(
+    1,
+    Math.ceil(chineseCharacters / 400 + otherWords / 200)
+  )
+}
+
 function pageDescription(pageData) {
   if (pageData.description) return pageData.description
   const file = path.join(DOCS_ROOT, pageData.relativePath)
@@ -121,6 +145,7 @@ export default defineConfig({
     ['meta', { name: 'robots', content: 'index, follow, max-image-preview:large' }],
     ['meta', { name: 'keywords', content: '金渐成,天机奇谈,公众号文章,投资,财经,文章归档' }],
   ],
+  transformPageData: addArticleStats,
   transformHead: ({ pageData }) => seoHead(pageData),
   sitemap: { hostname: SITE_URL },
   themeConfig: {
