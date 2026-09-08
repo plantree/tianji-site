@@ -30,6 +30,8 @@ npm run preview  # 预览构建结果
 
 侧边栏不需要手写：构建时扫描 `docs/articles/*/` 下的文件，按年、月两级分组，最新的年份与月份默认展开。新文章爬下来后直接重新构建即可生效。
 
+生产域名为 [tianji.plantree.me](http://tianji.plantree.me/)。构建时会生成 canonical URL、`sitemap.xml`、页面摘要、Open Graph、Twitter Card 和 JSON-LD 结构化数据。每篇文章还会按照独立路径显示访问计数。
+
 ## 爬虫
 
 ```bash

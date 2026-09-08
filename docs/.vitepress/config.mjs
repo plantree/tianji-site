@@ -1,5 +1,91 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitepress'
 import { SECTIONS, articlesOf, groupByYearMonth } from './articles.mjs'
+
+const DOCS_ROOT = fileURLToPath(new URL('../', import.meta.url))
+const SITE_URL = 'http://tianji.plantree.me'
+const SITE_NAME = '金渐成/天机奇谈'
+const SITE_DESCRIPTION = '金渐成与天机奇谈的公众号文章归档，按时间整理并提供全文搜索。'
+
+function pageRoute(relativePath) {
+  const route = relativePath.replace(/\.md$/, '').replace(/\/index$/, '/')
+  return route === 'index' ? '/' : `/${route}`
+}
+
+function articleDate(relativePath) {
+  return relativePath.match(/\/(\d{4}-\d{2}-\d{2})-/)?.[1]
+}
+
+function pageDescription(pageData) {
+  if (pageData.description) return pageData.description
+  const file = path.join(DOCS_ROOT, pageData.relativePath)
+  if (!fs.existsSync(file)) return SITE_DESCRIPTION
+
+  const text = fs
+    .readFileSync(file, 'utf-8')
+    .replace(/^---[\s\S]*?---/m, '')
+    .replace(/^#{1,6}\s+.*$/gm, '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/[*_`>#~-]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return text ? `${text.slice(0, 150)}${text.length > 150 ? '…' : ''}` : SITE_DESCRIPTION
+}
+
+function absoluteUrl(relativePath) {
+  return new URL(pageRoute(relativePath), `${SITE_URL}/`).href
+}
+
+function seoHead(pageData) {
+  const description = pageDescription(pageData)
+  const canonical = absoluteUrl(pageData.relativePath)
+  const date = articleDate(pageData.relativePath)
+  const isArticle = Boolean(date)
+  const title = pageData.title || SITE_NAME
+  const head = [
+    ['meta', { name: 'description', content: description }],
+    ['meta', { property: 'og:locale', content: 'zh_CN' }],
+    ['meta', { property: 'og:site_name', content: SITE_NAME }],
+    ['meta', { property: 'og:type', content: isArticle ? 'article' : 'website' }],
+    ['meta', { property: 'og:title', content: title }],
+    ['meta', { property: 'og:description', content: description }],
+    ['meta', { name: 'twitter:card', content: 'summary' }],
+    ['meta', { name: 'twitter:title', content: title }],
+    ['meta', { name: 'twitter:description', content: description }],
+  ]
+
+  head.push(['link', { rel: 'canonical', href: canonical }])
+  head.push(['meta', { property: 'og:url', content: canonical }])
+  if (date) {
+    head.push(['meta', { property: 'article:published_time', content: date }])
+  }
+
+  const structuredData = isArticle
+    ? {
+        '@context': 'https://schema.org',
+        '@type': 'Article',
+        headline: title,
+        description,
+        datePublished: date,
+        inLanguage: 'zh-CN',
+        author: { '@type': 'Organization', name: pageData.relativePath.includes('/tianjiqitan/') ? '天机奇谈' : '金渐成' },
+        mainEntityOfPage: canonical,
+        url: canonical,
+      }
+    : {
+        '@context': 'https://schema.org',
+        '@type': 'CollectionPage',
+        name: title,
+        description,
+        inLanguage: 'zh-CN',
+        url: canonical,
+      }
+  head.push(['script', { type: 'application/ld+json' }, JSON.stringify(structuredData)])
+  return head
+}
 
 function sidebarOf(dir) {
   const groups = [...groupByYearMonth(articlesOf(dir))].map(([year, months]) => ({
@@ -24,13 +110,19 @@ function sidebarOf(dir) {
 }
 
 export default defineConfig({
-  title: '金渐成/天机奇谈',
-  description: '金渐成与天机奇谈的公众号文章归档',
+  title: SITE_NAME,
+  description: SITE_DESCRIPTION,
   lang: 'zh-CN',
   lastUpdated: true,
   cleanUrls: true,
   ignoreDeadLinks: true,
-  head: [['meta', { name: 'theme-color', content: '#3c8772' }]],
+  head: [
+    ['meta', { name: 'theme-color', content: '#3c8772' }],
+    ['meta', { name: 'robots', content: 'index, follow, max-image-preview:large' }],
+    ['meta', { name: 'keywords', content: '金渐成,天机奇谈,公众号文章,投资,财经,文章归档' }],
+  ],
+  transformHead: ({ pageData }) => seoHead(pageData),
+  sitemap: { hostname: SITE_URL },
   themeConfig: {
     nav: SECTIONS.map((s) => ({ text: s.text, link: `/articles/${s.dir}/` })),
     sidebar: Object.fromEntries(
